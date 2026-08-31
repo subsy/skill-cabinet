@@ -497,6 +497,11 @@ h3 {
   color: var(--kind-builtin);
 }
 
+.meta [data-kind="profile"],
+.stamps [data-kind="profile"] {
+  color: var(--kind-profile, var(--kind-user));
+}
+
 .tick {
   position: absolute;
   right: 0.55rem;

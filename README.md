@@ -29,14 +29,20 @@ Requires Node 20+.
 
 ## What it can do
 
-- Filter by drawer and search name, description, path, or frontmatter
+- Filter by drawer, Hermes profile, and search name, description, path, or frontmatter
 - Read the skill body (rendered or source), YAML frontmatter, and extra files in the folder
-- Delete one skill or several at once
+- Move one skill or several at once into a local quarantine with a restore manifest
 - Switch skins from the Theme menu (Carbon is the default)
 
-**Delete** removes the skill directory from disk. There is no undo. Builtin Cursor skills and plugin-cache copies may come back the next time that tool updates.
+Hermes profiles under `~/.hermes/profiles/*/skills` are scanned recursively and shown
+with labels such as `Hermes profile · coding`.
 
-Keys: `j`/`k` move, `/` find, `x` mark, `d` delete.
+**Quarantine** moves the skill directory to `~/.skill-cabinet-quarantine/<entry>/skill`
+and writes `manifest.json` beside it with the original path and profile label. Nothing
+is permanently deleted by the app. Plugin-cache and builtin skills may return when
+their owning tool updates.
+
+Keys: `j`/`k` move, `/` find, `x` mark, `d` quarantine.
 
 ## Develop
 

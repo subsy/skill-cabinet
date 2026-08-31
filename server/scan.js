@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import YAML from "yaml";
 
 const HOME = os.homedir();
+const QUARANTINE_DIR_NAME = ".skill-cabinet-quarantine";
 
 const SKIP_HOME_DOTDIRS = new Set([
   ".cache",
@@ -65,7 +66,11 @@ function idFor(absPath) {
 function findSkillFile(dir) {
   for (const name of ["SKILL.md", "skill.md"]) {
     const p = path.join(dir, name);
-    if (exists(p) && !isDir(p)) return p;
+    try {
+      if (fs.lstatSync(p).isFile()) return p;
+    } catch {
+      /* ignore unreadable or missing files */
+    }
   }
   return null;
 }
@@ -102,21 +107,35 @@ function kindFor(root) {
   return root.kind;
 }
 
-export function discoverRoots() {
+export function discoverRoots(home = HOME) {
   const roots = [];
   const seen = new Set();
 
-  const add = (scopeId, scopeLabel, root, kind, recursive = false) => {
+  const add = (
+    scopeId,
+    scopeLabel,
+    root,
+    kind,
+    recursive = false,
+    profileName,
+  ) => {
     if (!exists(root) || !isDir(root)) return;
     const resolved = real(root);
     if (seen.has(resolved)) return;
     seen.add(resolved);
-    roots.push({ scopeId, scopeLabel, root: resolved, kind, recursive });
+    roots.push({
+      scopeId,
+      scopeLabel,
+      root: resolved,
+      kind,
+      recursive,
+      profileName,
+    });
   };
 
   let homeEntries = [];
   try {
-    homeEntries = fs.readdirSync(HOME, { withFileTypes: true });
+    homeEntries = fs.readdirSync(home, { withFileTypes: true });
   } catch {
     homeEntries = [];
   }
@@ -126,7 +145,7 @@ export function discoverRoots() {
     if (!entry.name.startsWith(".")) continue;
     if (SKIP_HOME_DOTDIRS.has(entry.name)) continue;
 
-    const base = path.join(HOME, entry.name);
+    const base = path.join(home, entry.name);
     const scopeId = entry.name.slice(1);
 
     for (const folder of ["skills", "skill"]) {
@@ -154,17 +173,36 @@ export function discoverRoots() {
   add(
     "gemini",
     ".gemini/antigravity",
-    path.join(HOME, ".gemini/antigravity/skills"),
+    path.join(home, ".gemini/antigravity/skills"),
     "user",
     false,
   );
   add(
     "gemini",
     ".gemini/antigravity (global)",
-    path.join(HOME, ".gemini/antigravity/global_skills"),
+    path.join(home, ".gemini/antigravity/global_skills"),
     "user",
     false,
   );
+
+  const hermesProfiles = path.join(home, ".hermes", "profiles");
+  let profileEntries = [];
+  try {
+    profileEntries = fs.readdirSync(hermesProfiles, { withFileTypes: true });
+  } catch {
+    profileEntries = [];
+  }
+  for (const entry of profileEntries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    add(
+      `hermes-profile:${entry.name}`,
+      `Hermes profile · ${entry.name}`,
+      path.join(hermesProfiles, entry.name, "skills"),
+      "profile",
+      true,
+      entry.name,
+    );
+  }
 
   return roots;
 }
@@ -177,7 +215,7 @@ function collectDirectSkills(root, list) {
     return;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (!entry.isDirectory()) continue;
     if (SKIP_WALK.has(entry.name)) continue;
     const dir = path.resolve(path.join(root.root, entry.name));
     const skillMd = findSkillFile(dir);
@@ -189,19 +227,19 @@ function collectDirectSkills(root, list) {
 
 function walkSkillContainers(dir, root, list, depth = 0) {
   if (depth > 14) return;
+  const skillMd = findSkillFile(dir);
+  if (skillMd) {
+    list.push({ dir, skillMd, root });
+    return;
+  }
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
-  const base = path.basename(dir);
-  if (base === "skills" || base === "skill") {
-    collectDirectSkills({ ...root, root: dir }, list);
-    return;
-  }
   for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (!entry.isDirectory()) continue;
     if (SKIP_WALK.has(entry.name)) continue;
     walkSkillContainers(path.join(dir, entry.name), root, list, depth + 1);
   }
@@ -222,10 +260,8 @@ function dirSizeAndFiles(dir) {
       if (SKIP_WALK.has(entry.name)) continue;
       const abs = path.join(current, entry.name);
       const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory() || entry.isSymbolicLink()) {
-        if (entry.isDirectory() || (entry.isSymbolicLink() && isDir(abs))) {
-          walk(abs, nextRel, depth + 1);
-        }
+      if (entry.isDirectory()) {
+        walk(abs, nextRel, depth + 1);
       } else if (entry.isFile()) {
         let size = 0;
         let mtime = 0;
@@ -276,6 +312,7 @@ function summarizeSkill(dir, skillMd, root) {
     scopeId: root.scopeId,
     scopeLabel: root.scopeLabel,
     kind: kindFor(root),
+    profileName: root.profileName,
     path: dir,
     skillFile: skillMd,
     mtime,
@@ -283,8 +320,8 @@ function summarizeSkill(dir, skillMd, root) {
   };
 }
 
-export function scanSkills() {
-  const roots = discoverRoots();
+export function scanSkills(home = HOME) {
+  const roots = discoverRoots(home);
   const found = [];
   for (const root of roots) {
     if (root.recursive) {
@@ -346,7 +383,12 @@ export function readSkillFile(summary, relPath) {
     err.status = 404;
     throw err;
   }
-  const st = fs.statSync(abs);
+  const st = fs.lstatSync(abs);
+  if (st.isSymbolicLink()) {
+    const err = new Error("Symbolic links are not previewable");
+    err.status = 400;
+    throw err;
+  }
   if (st.size > 1_500_000) {
     const err = new Error("File too large to preview");
     err.status = 413;
@@ -366,10 +408,10 @@ export function readSkillFile(summary, relPath) {
   };
 }
 
-export function assertDeletable(summary, roots) {
+export function assertDeletable(summary, roots, home = HOME) {
   const target = path.resolve(summary.path);
   const ok = roots.some((r) => contained(target, r.root) && path.resolve(r.root) !== target);
-  if (!ok || target === HOME) {
+  if (!ok || target === path.resolve(home)) {
     const err = new Error(
       ok
         ? "Refusing to delete a cabinet root"
@@ -386,11 +428,45 @@ export function assertDeletable(summary, roots) {
   return target;
 }
 
-export function deleteSkillDir(target) {
-  const st = fs.lstatSync(target);
-  if (st.isSymbolicLink()) {
-    fs.unlinkSync(target);
-    return;
+export function quarantineSkillDir(summary, home = HOME) {
+  const target = path.resolve(summary.path);
+  const quarantineRoot = path.join(home, QUARANTINE_DIR_NAME);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const entryDir = path.join(
+    quarantineRoot,
+    `${stamp}--${summary.id}--${path.basename(target)}`,
+  );
+  const destination = path.join(entryDir, "skill");
+
+  const targetStat = fs.lstatSync(target);
+  if (!targetStat.isDirectory() || targetStat.isSymbolicLink()) {
+    const err = new Error("Only real skill directories can be quarantined");
+    err.status = 400;
+    throw err;
   }
-  fs.rmSync(target, { recursive: true, force: false });
+
+  fs.mkdirSync(quarantineRoot, { recursive: true });
+  fs.mkdirSync(entryDir, { recursive: false });
+  try {
+    fs.writeFileSync(
+      path.join(entryDir, "manifest.json"),
+      `${JSON.stringify(
+        {
+          name: summary.name,
+          originalPath: target,
+          scopeLabel: summary.scopeLabel,
+          profileName: summary.profileName ?? null,
+          quarantinedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    fs.renameSync(target, destination);
+  } catch (err) {
+    fs.rmSync(entryDir, { recursive: true, force: true });
+    throw err;
+  }
+  return { path: entryDir, skillPath: destination };
 }

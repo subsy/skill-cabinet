@@ -24,9 +24,9 @@ export function fetchSkillFile(id, relPath) {
   return json(fetch(`/api/skills/${id}/file?${q}`, { headers }));
 }
 
-export function deleteSkills(ids) {
+export function quarantineSkills(ids) {
   return json(
-    fetch("/api/skills/delete", {
+    fetch("/api/skills/quarantine", {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),

@@ -8,7 +8,7 @@ import {
   readSkill,
   readSkillFile,
   assertDeletable,
-  deleteSkillDir,
+  quarantineSkillDir,
 } from "./scan.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,9 +106,9 @@ app.get("/api/skills/:id/file", (req, res) => {
   }
 });
 
-function deleteIds(ids) {
+function quarantineIds(ids) {
   const index = getIndex(true);
-  const deleted = [];
+  const quarantined = [];
   const errors = [];
   for (const id of ids) {
     const summary = index.byId.get(id);
@@ -118,37 +118,53 @@ function deleteIds(ids) {
     }
     try {
       const target = assertDeletable(summary, index.roots);
-      deleteSkillDir(target);
-      deleted.push({ id, path: target, name: summary.name });
+      const entry = quarantineSkillDir(summary);
+      quarantined.push({
+        id,
+        path: entry.path,
+        skillPath: entry.skillPath,
+        originalPath: target,
+        name: summary.name,
+      });
     } catch (err) {
       errors.push({ id, error: err.message, path: summary.path });
     }
   }
   cache = { at: 0, payload: null };
-  return { deleted, errors };
+  return { quarantined, errors };
 }
 
-app.delete("/api/skills/:id", (req, res) => {
+function respondToQuarantine(req, res, ids) {
   try {
-    const result = deleteIds([req.params.id]);
-    const status = result.deleted.length ? 200 : 400;
+    const result = quarantineIds(ids);
+    const status = result.quarantined.length ? 200 : 400;
     res.status(status).json(result);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
+}
+
+app.delete("/api/skills/:id", (req, res) => {
+  respondToQuarantine(req, res, [req.params.id]);
 });
 
-app.post("/api/skills/delete", (req, res) => {
-  try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    if (!ids.length) {
-      res.status(400).json({ error: "No cards selected" });
-      return;
-    }
-    res.json(deleteIds(ids.map(String)));
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+app.post("/api/skills/quarantine", (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  if (!ids.length) {
+    res.status(400).json({ error: "No cards selected" });
+    return;
   }
+  respondToQuarantine(req, res, ids.map(String));
+});
+
+// Keep the old route non-destructive for existing clients.
+app.post("/api/skills/delete", (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  if (!ids.length) {
+    res.status(400).json({ error: "No cards selected" });
+    return;
+  }
+  respondToQuarantine(req, res, ids.map(String));
 });
 
 if (isProd) {

@@ -6,7 +6,7 @@ import {
   fetchCatalog,
   fetchSkill,
   fetchSkillFile,
-  deleteSkills,
+  quarantineSkills,
 } from "./api.js";
 import Logo from "./Logo.jsx";
 import {
@@ -69,6 +69,7 @@ function stringifyValue(value) {
 function kindStamp(kind) {
   if (kind === "builtin") return "builtin";
   if (kind === "plugin") return "plugin cache";
+  if (kind === "profile") return "Hermes profile";
   return "user";
 }
 
@@ -248,17 +249,17 @@ export default function App() {
     });
   }
 
-  async function confirmDelete() {
+  async function confirmQuarantine() {
     if (!slip) return;
     setBusy(true);
     setNotice("");
     try {
-      const result = await deleteSkills(slip.ids);
-      const n = result.deleted.length;
+      const result = await quarantineSkills(slip.ids);
+      const n = result.quarantined.length;
       setNotice(
         n
-          ? `Deleted ${n} card${n === 1 ? "" : "s"} from disk.`
-          : "Nothing was deleted.",
+          ? `Quarantined ${n} card${n === 1 ? "" : "s"}. Original paths are recorded.`
+          : "Nothing was quarantined.",
       );
       if (result.errors?.length) {
         setError(result.errors.map((e) => e.error).join("; "));
@@ -313,7 +314,7 @@ export default function App() {
               spellCheck="false"
             />
           </label>
-          <p className="keys">j k move · / find · x mark · d delete</p>
+          <p className="keys">j k move · / find · x mark · d quarantine</p>
         </div>
         <div className="mast-tools">
           <p className="census">
@@ -388,7 +389,7 @@ export default function App() {
                 openSlip(checked.size ? [...checked] : selectedId ? [selectedId] : [])
               }
             >
-              Delete
+              Quarantine
             </button>
           </div>
           <ol ref={listRef} className="cards">
@@ -437,11 +438,11 @@ export default function App() {
 
         <main className="reader" aria-live="polite">
           {slip ? (
-            <DeleteConfirm
+            <QuarantineConfirm
               slip={slip}
               busy={busy}
               onCancel={() => setSlip(null)}
-              onConfirm={confirmDelete}
+              onConfirm={confirmQuarantine}
             />
           ) : !selected ? (
             <EmptyReader loading={loading} />
@@ -454,7 +455,7 @@ export default function App() {
               view={view}
               setView={setView}
               onOpenFile={openFile}
-              onDelete={() => openSlip([selected.id])}
+              onQuarantine={() => openSlip([selected.id])}
             />
           )}
         </main>
@@ -477,18 +478,18 @@ function EmptyReader({ loading }) {
   );
 }
 
-function DeleteConfirm({ slip, busy, onCancel, onConfirm }) {
+function QuarantineConfirm({ slip, busy, onCancel, onConfirm }) {
   const builtin = slip.cards.filter((c) => c.kind !== "user");
   return (
     <div className="leaf slip">
-      <p className="edition">Delete</p>
+      <p className="edition">Quarantine</p>
       <h2>
-        Delete {slip.cards.length} card
-        {slip.cards.length === 1 ? "" : "s"} from disk
+        Quarantine {slip.cards.length} card
+        {slip.cards.length === 1 ? "" : "s"}
       </h2>
       <p className="warning">
-        This deletes the skill folder from the local filesystem. There is no
-        undo.
+        This moves the skill folder to ~/.skill-cabinet-quarantine. Its original
+        path is recorded in manifest.json so it can be restored manually.
       </p>
       {builtin.length > 0 && (
         <p className="warning">
@@ -514,7 +515,7 @@ function DeleteConfirm({ slip, busy, onCancel, onConfirm }) {
           onClick={onConfirm}
           disabled={busy}
         >
-          {busy ? "Deleting…" : "Delete"}
+          {busy ? "Quarantining…" : "Quarantine"}
         </button>
       </div>
     </div>
@@ -529,7 +530,7 @@ function SkillLeaf({
   view,
   setView,
   onOpenFile,
-  onDelete,
+  onQuarantine,
 }) {
   const fm = detail?.frontmatter || selected.frontmatter || {};
   const keys = Object.keys(fm);
@@ -555,8 +556,8 @@ function SkillLeaf({
             <span>{formatWhen(selected.mtime)}</span>
           </p>
         </div>
-        <button type="button" className="stamp" onClick={onDelete}>
-          Delete this skill
+        <button type="button" className="stamp" onClick={onQuarantine}>
+          Quarantine this skill
         </button>
         <div className="leaf-tools">
           <div className="toggle">

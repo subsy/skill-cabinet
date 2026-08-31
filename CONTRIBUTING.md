@@ -30,7 +30,7 @@ npm start
 ## Pull requests
 
 - One concern per PR.
-- Match the existing copy: library language, not startup language. Destructive actions say **Delete**.
+- Match the existing copy: library language, not startup language. Destructive actions say **Quarantine**.
 - Do not bind the server to a public interface.
 - Do not commit secrets, `.env` files, or `dist/`.
 - `npm run build` should succeed.
