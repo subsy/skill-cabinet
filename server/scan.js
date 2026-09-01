@@ -120,6 +120,13 @@ export function discoverRoots(home = HOME) {
     profileName,
   ) => {
     if (!exists(root) || !isDir(root)) return;
+    let rootStat;
+    try {
+      rootStat = fs.lstatSync(root);
+    } catch {
+      return;
+    }
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return;
     const resolved = real(root);
     if (seen.has(resolved)) return;
     seen.add(resolved);
@@ -371,22 +378,30 @@ export function readSkill(summary) {
 
 export function readSkillFile(summary, relPath) {
   const normalized = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const abs = real(path.join(summary.path, normalized));
+  const joined = path.join(summary.path, normalized);
+  let st;
+  try {
+    st = fs.lstatSync(joined);
+  } catch {
+    const err = new Error("File not found");
+    err.status = 404;
+    throw err;
+  }
+  if (st.isSymbolicLink()) {
+    const err = new Error("Symbolic links are not previewable");
+    err.status = 400;
+    throw err;
+  }
+  const abs = real(joined);
   const root = real(summary.path);
   if (abs !== root && !abs.startsWith(root + path.sep)) {
     const err = new Error("Path escapes skill directory");
     err.status = 400;
     throw err;
   }
-  if (!exists(abs) || isDir(abs)) {
+  if (st.isDirectory()) {
     const err = new Error("File not found");
     err.status = 404;
-    throw err;
-  }
-  const st = fs.lstatSync(abs);
-  if (st.isSymbolicLink()) {
-    const err = new Error("Symbolic links are not previewable");
-    err.status = 400;
     throw err;
   }
   if (st.size > 1_500_000) {

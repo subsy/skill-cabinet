@@ -131,7 +131,7 @@ function quarantineIds(ids) {
     }
   }
   cache = { at: 0, payload: null };
-  return { quarantined, errors };
+  return { quarantined, deleted: [], errors };
 }
 
 function respondToQuarantine(req, res, ids) {

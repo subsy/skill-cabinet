@@ -113,6 +113,27 @@ test("moves a skill into quarantine and records its original location", async ()
   assert.equal(manifest.scopeLabel, "Hermes profile · coding");
 });
 
+test("does not index symlinked profile skill roots", async () => {
+  const home = await makeHome();
+  const external = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "skill-cabinet-profile-external-"),
+  );
+  await fs.promises.writeFile(
+    path.join(external, "SKILL.md"),
+    "---\nname: outside-profile\n---\n\n# Outside\n",
+  );
+  const profile = path.join(home, ".hermes", "profiles", "linked-root");
+  await fs.promises.mkdir(profile, { recursive: true });
+  await fs.promises.symlink(external, path.join(profile, "skills"), "dir");
+
+  const { skills } = scanSkills(home);
+  assert.equal(skills.some((skill) => skill.name === "outside-profile"), false);
+  assert.equal(
+    skills.some((skill) => skill.scopeLabel === "Hermes profile · linked-root"),
+    false,
+  );
+});
+
 test("does not index symlinked skill directories or preview symlinked files", async () => {
   const home = await makeHome();
   const external = await fs.promises.mkdtemp(
@@ -140,6 +161,6 @@ test("does not index symlinked skill directories or preview symlinked files", as
   );
   assert.throws(
     () => readSkillFile(shared, "secret.txt"),
-    /Path escapes skill directory/,
+    /Symbolic links are not previewable/,
   );
 });

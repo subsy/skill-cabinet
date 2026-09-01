@@ -479,7 +479,9 @@ function EmptyReader({ loading }) {
 }
 
 function QuarantineConfirm({ slip, busy, onCancel, onConfirm }) {
-  const builtin = slip.cards.filter((c) => c.kind !== "user");
+  const regenerated = slip.cards.filter(
+    (c) => c.kind === "builtin" || c.kind === "plugin",
+  );
   return (
     <div className="leaf slip">
       <p className="edition">Quarantine</p>
