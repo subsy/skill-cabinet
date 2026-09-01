@@ -7,6 +7,8 @@ import {
   fetchSkill,
   fetchSkillFile,
   deleteSkills,
+  archiveSkills,
+  restoreSkills,
 } from "./api.js";
 import Logo from "./Logo.jsx";
 import {
@@ -54,6 +56,8 @@ function matchesQuery(skill, q) {
     skill.description,
     skill.path,
     skill.scopeLabel,
+    skill.fromScope || "",
+    skill.archived ? "archived archive" : "",
     skill.file ? "file" : "",
     skill.link ? "symlink link" : "",
     skill.linkTarget || "",
@@ -78,8 +82,57 @@ function stringifyValue(value) {
 function kindStamp(kind) {
   if (kind === "builtin") return "builtin";
   if (kind === "plugin") return "plugin cache";
+  if (kind === "archive") return "archived";
   return "user";
 }
+
+// The three shelf actions. Each names its own copy so the confirmation slip and
+// the buttons cannot drift apart, and so only delete wears the stamp: archive
+// and restore are reversible and should not read as destruction.
+const ACTIONS = {
+  delete: {
+    label: "Delete",
+    edition: "Delete",
+    run: deleteSkills,
+    key: "deleted",
+    destructive: true,
+    heading: (n) => `Delete ${n} card${n === 1 ? "" : "s"} from disk`,
+    note: () => "This deletes the skill from the local filesystem. There is no undo.",
+    busy: "Deleting…",
+    done: (n) => `Deleted ${n} card${n === 1 ? "" : "s"} from disk.`,
+    none: "Nothing was deleted.",
+  },
+  archive: {
+    label: "Archive",
+    edition: "Archive",
+    run: archiveSkills,
+    key: "archived",
+    destructive: false,
+    heading: (n) => `Archive ${n} card${n === 1 ? "" : "s"} out of the drawers`,
+    note: (where) => (
+      <>
+        The cards move to <code>{where}</code>. No agent reads that folder.
+        Restore puts them back where they came from.
+      </>
+    ),
+    busy: "Archiving…",
+    done: (n) => `Archived ${n} card${n === 1 ? "" : "s"}.`,
+    none: "Nothing was archived.",
+  },
+  restore: {
+    label: "Restore",
+    edition: "Restore",
+    run: restoreSkills,
+    key: "restored",
+    destructive: false,
+    heading: (n) => `Restore ${n} card${n === 1 ? "" : "s"} to their drawers`,
+    note: () =>
+      "Each card goes back to the path it was filed from. A card whose path is already taken stays in the archive.",
+    busy: "Restoring…",
+    done: (n) => `Restored ${n} card${n === 1 ? "" : "s"}.`,
+    none: "Nothing was restored.",
+  },
+};
 
 function originTitle(origin) {
   if (origin.certainty === "inferred") {
@@ -218,28 +271,40 @@ export default function App() {
 
   const skills = catalog?.skills ?? [];
   const scopes = catalog?.scopes ?? [];
-  const linked = useMemo(
+  const archiveRoot = catalog?.archiveRoot || "the archive";
+  const inArchive = scopeId === "archive";
+  const filtered = useMemo(
     () => skills.filter((s) => matchesLinkFilter(s, linkFilter)),
     [skills, linkFilter],
+  );
+  // Archived cards are held out of the drawer counts on purpose: they are not
+  // installed any more, so counting them would overstate what the agents load.
+  const live = useMemo(() => filtered.filter((s) => !s.archived), [filtered]);
+  const archived = useMemo(() => filtered.filter((s) => s.archived), [filtered]);
+  const drawerScopes = useMemo(
+    () => scopes.filter((s) => s.id !== "archive"),
+    [scopes],
   );
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return linked.filter((s) => {
-      if (scopeId !== "all" && s.scopeId !== scopeId) return false;
+    const pool = inArchive ? archived : live;
+    return pool.filter((s) => {
+      if (!inArchive && scopeId !== "all" && s.scopeId !== scopeId) return false;
       return matchesQuery(s, q);
     });
-  }, [linked, scopeId, query]);
+  }, [live, archived, inArchive, scopeId, query]);
 
   const scopeCounts = useMemo(() => {
     const by = new Map();
-    for (const skill of linked) {
+    for (const skill of live) {
       by.set(skill.scopeId, (by.get(skill.scopeId) || 0) + 1);
     }
     return by;
-  }, [linked]);
+  }, [live]);
 
   useEffect(() => {
+    if (busy) return;
     if (!visible.length) {
       setSelectedId(null);
       return;
@@ -247,7 +312,7 @@ export default function App() {
     if (!visible.some((s) => s.id === selectedId)) {
       setSelectedId(visible[0].id);
     }
-  }, [visible, selectedId]);
+  }, [visible, selectedId, busy]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -312,7 +377,15 @@ export default function App() {
       }
       if (e.key === "d" && !slip) {
         e.preventDefault();
-        openSlip(checked.size ? [...checked] : selectedId ? [selectedId] : []);
+        openSlip(marked(), "delete");
+      }
+      if (e.key === "a" && !slip && !inArchive) {
+        e.preventDefault();
+        openSlip(marked(), "archive");
+      }
+      if (e.key === "r" && !slip && inArchive) {
+        e.preventDefault();
+        openSlip(marked(), "restore");
       }
       if (e.key === "Escape" && slip) {
         setSlip(null);
@@ -320,7 +393,14 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visible, selectedId, checked, slip]);
+  }, [visible, selectedId, checked, slip, inArchive]);
+
+  // A bare selection counts as one marked card, so every action works without
+  // ticking a box first.
+  function marked() {
+    if (checked.size) return [...checked];
+    return selectedId ? [selectedId] : [];
+  }
 
   function toggleChecked(id) {
     setChecked((prev) => {
@@ -342,29 +422,24 @@ export default function App() {
     });
   }
 
-  function openSlip(ids) {
+  function openSlip(ids, mode) {
     if (!ids.length) return;
     const cards = ids
       .map((id) => skills.find((s) => s.id === id))
       .filter(Boolean);
-    setSlip({
-      ids,
-      cards,
-    });
+    setSlip({ ids, cards, mode });
   }
 
-  async function confirmDelete() {
+  async function confirmSlip() {
     if (!slip) return;
+    const action = ACTIONS[slip.mode];
     setBusy(true);
     setNotice("");
+    setError("");
     try {
-      const result = await deleteSkills(slip.ids);
-      const n = result.deleted.length;
-      setNotice(
-        n
-          ? `Deleted ${n} card${n === 1 ? "" : "s"} from disk.`
-          : "Nothing was deleted.",
-      );
+      const result = await action.run(slip.ids);
+      const n = result[action.key]?.length ?? 0;
+      setNotice(n ? action.done(n) : action.none);
       if (result.errors?.length) {
         setError(result.errors.map((e) => e.error).join("; "));
       }
@@ -420,7 +495,9 @@ export default function App() {
               spellCheck="false"
             />
           </label>
-          <p className="keys">j k move · / find · x mark · d delete</p>
+          <p className="keys">
+            j k move · / find · x mark · a archive · r restore · d delete
+          </p>
         </div>
         <div className="mast-tools">
           <p className="census">
@@ -453,9 +530,9 @@ export default function App() {
           >
             <i />
             <span>All drawers</span>
-            <em>{linked.length}</em>
+            <em>{live.length}</em>
           </button>
-          {scopes.map((scope) => (
+          {drawerScopes.map((scope) => (
             <button
               key={scope.id}
               type="button"
@@ -470,6 +547,19 @@ export default function App() {
               <em>{scopeCounts.get(scope.id) ?? 0}</em>
             </button>
           ))}
+          <button
+            type="button"
+            className={inArchive ? "drawer archive on" : "drawer archive"}
+            onClick={() => {
+              setSlip(null);
+              setScopeId("archive");
+            }}
+            title={`Held out of every drawer an agent reads · ${archiveRoot}`}
+          >
+            <i data-kind="archive" />
+            <span>Archive</span>
+            <em>{archived.length}</em>
+          </button>
         </nav>
 
         <section className="tray" aria-label="Skills">
@@ -494,16 +584,24 @@ export default function App() {
                 setLinkFilter(next);
               }}
             />
-            <button
-              type="button"
-              className="stamp"
-              disabled={!checked.size && !selectedId}
-              onClick={() =>
-                openSlip(checked.size ? [...checked] : selectedId ? [selectedId] : [])
-              }
-            >
-              Delete
-            </button>
+            <div className="tray-actions">
+              <button
+                type="button"
+                className="shelve"
+                disabled={!checked.size && !selectedId}
+                onClick={() => openSlip(marked(), inArchive ? "restore" : "archive")}
+              >
+                {inArchive ? "Restore" : "Archive"}
+              </button>
+              <button
+                type="button"
+                className="stamp"
+                disabled={!checked.size && !selectedId}
+                onClick={() => openSlip(marked(), "delete")}
+              >
+                Delete
+              </button>
+            </div>
           </div>
           <ol ref={listRef} className="cards">
             {visible.map((skill) => (
@@ -535,6 +633,9 @@ export default function App() {
                   </p>
                   <p className="meta">
                     <span data-kind={skill.kind}>{kindStamp(skill.kind)}</span>
+                    {skill.archived && skill.fromScope ? (
+                      <span data-from>from {skill.fromScope}</span>
+                    ) : null}
                     {formStamps(skill)}
                     <time>{formatWhen(skill.mtime)}</time>
                   </p>
@@ -543,8 +644,9 @@ export default function App() {
             ))}
             {!loading && !visible.length && (
               <li className="empty-tray">
-                No cards in this drawer
-                {query ? " match the search." : "."}
+                {inArchive && !query
+                  ? "The archive is empty. Archive a skill to keep a copy no agent reads."
+                  : `No cards in this drawer${query ? " match the search." : "."}`}
               </li>
             )}
           </ol>
@@ -552,11 +654,12 @@ export default function App() {
 
         <main ref={readerRef} className="reader" aria-live="polite">
           {slip ? (
-            <DeleteConfirm
+            <ActionSlip
               slip={slip}
               busy={busy}
+              archiveRoot={archiveRoot}
               onCancel={() => setSlip(null)}
-              onConfirm={confirmDelete}
+              onConfirm={confirmSlip}
             />
           ) : !selected ? (
             <EmptyReader loading={loading} />
@@ -569,7 +672,7 @@ export default function App() {
               view={view}
               setView={setView}
               onOpenFile={openFile}
-              onDelete={() => openSlip([selected.id])}
+              onAction={(mode) => openSlip([selected.id], mode)}
             />
           )}
         </main>
@@ -592,21 +695,23 @@ function EmptyReader({ loading }) {
   );
 }
 
-function DeleteConfirm({ slip, busy, onCancel, onConfirm }) {
-  const builtin = slip.cards.filter((c) => c.kind !== "user");
+function ActionSlip({ slip, busy, archiveRoot, onCancel, onConfirm }) {
+  const action = ACTIONS[slip.mode];
+  const count = slip.cards.length;
+  // A plugin cache or builtin drawer is written by the tool that owns it, so
+  // taking a card out of one is only as permanent as that tool's next update.
+  // That is true of archiving as much as deleting.
+  const managed = slip.cards.filter((card) => card.kind !== "user");
   return (
     <div className="leaf slip">
-      <p className="edition">Delete</p>
-      <h2>
-        Delete {slip.cards.length} card
-        {slip.cards.length === 1 ? "" : "s"} from disk
-      </h2>
-      <p className="warning">
-        This deletes the skill from the local filesystem. There is no undo.
+      <p className="edition">{action.edition}</p>
+      <h2>{action.heading(count)}</h2>
+      <p className={action.destructive ? "warning" : "aside"}>
+        {action.note(archiveRoot)}
       </p>
-      {builtin.length > 0 && (
+      {managed.length > 0 && slip.mode !== "restore" && (
         <p className="warning">
-          {builtin.length} of these live in a plugin cache or builtin drawer and
+          {managed.length} of these live in a plugin cache or builtin drawer and
           may return the next time that tool updates.
         </p>
       )}
@@ -624,11 +729,11 @@ function DeleteConfirm({ slip, busy, onCancel, onConfirm }) {
         </button>
         <button
           type="button"
-          className="stamp"
+          className={action.destructive ? "stamp" : "shelve"}
           onClick={onConfirm}
           disabled={busy}
         >
-          {busy ? "Deleting…" : "Delete"}
+          {busy ? action.busy : action.label}
         </button>
       </div>
     </div>
@@ -643,13 +748,14 @@ function SkillLeaf({
   view,
   setView,
   onOpenFile,
-  onDelete,
+  onAction,
 }) {
   const fm = detail?.frontmatter || selected.frontmatter || {};
   const keys = Object.keys(fm);
   const files = detail?.files || [];
   const skillRel = selected.skillRel || "SKILL.md";
-  const showDisk = selected.file || selected.link || selected.origin;
+  const showDisk =
+    selected.file || selected.link || selected.origin || selected.archived;
   const body = preview
     ? preview.binary
       ? `Binary file · ${formatBytes(preview.size)}`
@@ -667,14 +773,30 @@ function SkillLeaf({
           <p className="path">{selected.path}</p>
           <p className="stamps">
             <span data-kind={selected.kind}>{kindStamp(selected.kind)}</span>
+            {selected.archived && selected.fromScope ? (
+              <span data-from>from {selected.fromScope}</span>
+            ) : null}
             {formStamps(selected, { origin: "all" })}
             {detail ? <span>{formatBytes(detail.bytes)}</span> : null}
             <span>{formatWhen(selected.mtime)}</span>
           </p>
         </div>
-        <button type="button" className="stamp" onClick={onDelete}>
-          Delete this skill
-        </button>
+        <div className="leaf-actions">
+          <button
+            type="button"
+            className="shelve"
+            onClick={() => onAction(selected.archived ? "restore" : "archive")}
+          >
+            {selected.archived ? "Restore" : "Archive"}
+          </button>
+          <button
+            type="button"
+            className="stamp"
+            onClick={() => onAction("delete")}
+          >
+            Delete
+          </button>
+        </div>
         <div className="leaf-tools">
           <div className="toggle">
             <button
@@ -709,6 +831,12 @@ function SkillLeaf({
               <dt>form</dt>
               <dd>{selected.file ? "file" : "folder"}</dd>
             </div>
+            {detail?.archivedFrom ? (
+              <div>
+                <dt>restores to</dt>
+                <dd>{detail.archivedFrom}</dd>
+              </div>
+            ) : null}
             {selected.link ? (
               <div>
                 <dt>symlink</dt>

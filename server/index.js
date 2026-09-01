@@ -9,7 +9,9 @@ import {
   readSkillFile,
   assertDeletable,
   deleteSkillDir,
+  ARCHIVE_ROOT,
 } from "./scan.js";
+import { archiveSkill, restoreSkill, archiveRecordFor } from "./archive.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -63,8 +65,11 @@ app.get("/api/skills", (req, res) => {
     }
     res.json({
       home: process.env.HOME,
+      archiveRoot: ARCHIVE_ROOT,
       scannedAt: cache.at,
-      total: index.skills.length,
+      // The census counts what the agents can actually see. Archived cards are
+      // still indexed, so the tray can show them, but they are not installed.
+      total: index.skills.filter((skill) => !skill.archived).length,
       scopes,
       skills: index.skills,
     });
@@ -81,7 +86,15 @@ app.get("/api/skills/:id", (req, res) => {
       res.status(404).json({ error: "Skill not in the cabinet" });
       return;
     }
-    res.json(readSkill(summary));
+    const detail = readSkill(summary);
+    if (summary.archived) {
+      const record = archiveRecordFor(summary.path);
+      if (record) {
+        detail.archivedFrom = record.originPath;
+        detail.archivedAt = record.archivedAt;
+      }
+    }
+    res.json(detail);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -106,9 +119,11 @@ app.get("/api/skills/:id/file", (req, res) => {
   }
 });
 
-function deleteIds(ids) {
+// Delete, archive and restore all walk the same list and fail the same way: one
+// bad card reports its own error and the rest of the batch still runs.
+function applyToIds(ids, apply) {
   const index = getIndex(true);
-  const deleted = [];
+  const done = [];
   const errors = [];
   for (const id of ids) {
     const summary = index.byId.get(id);
@@ -117,15 +132,46 @@ function deleteIds(ids) {
       continue;
     }
     try {
-      const target = assertDeletable(summary, index.roots);
-      deleteSkillDir(target);
-      deleted.push({ id, path: target, name: summary.name });
+      done.push({ id, name: summary.name, ...apply(summary, index) });
     } catch (err) {
       errors.push({ id, error: err.message, path: summary.path });
     }
   }
   cache = { at: 0, payload: null };
-  return { deleted, errors };
+  return { done, errors };
+}
+
+function deleteIds(ids) {
+  const { done, errors } = applyToIds(ids, (summary, index) => {
+    const target = assertDeletable(summary, index.roots);
+    deleteSkillDir(target);
+    return { path: target };
+  });
+  return { deleted: done, errors };
+}
+
+function archiveIds(ids) {
+  const { done, errors } = applyToIds(ids, (summary, index) =>
+    archiveSkill(summary, index.roots),
+  );
+  return { archived: done, errors };
+}
+
+function restoreIds(ids) {
+  const { done, errors } = applyToIds(ids, (summary, index) =>
+    restoreSkill(summary, index.roots),
+  );
+  return { restored: done, errors };
+}
+
+function idsFrom(body) {
+  const ids = Array.isArray(body?.ids) ? body.ids : [];
+  if (!ids.length) {
+    const err = new Error("No cards selected");
+    err.status = 400;
+    throw err;
+  }
+  return ids.map(String);
 }
 
 app.delete("/api/skills/:id", (req, res) => {
@@ -140,12 +186,23 @@ app.delete("/api/skills/:id", (req, res) => {
 
 app.post("/api/skills/delete", (req, res) => {
   try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    if (!ids.length) {
-      res.status(400).json({ error: "No cards selected" });
-      return;
-    }
-    res.json(deleteIds(ids.map(String)));
+    res.json(deleteIds(idsFrom(req.body)));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/skills/archive", (req, res) => {
+  try {
+    res.json(archiveIds(idsFrom(req.body)));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/skills/restore", (req, res) => {
+  try {
+    res.json(restoreIds(idsFrom(req.body)));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

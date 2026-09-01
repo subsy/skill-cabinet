@@ -6,6 +6,12 @@ import YAML from "yaml";
 
 const HOME = os.homedir();
 
+// Archived skills are moved here, outside every drawer an agent reads.
+// The name matters: discoverRoots() only ever adopts a folder called
+// "skills" or "skill", so the cabinet can never re-index its own archive
+// as a live drawer.
+export const ARCHIVE_ROOT = path.join(HOME, ".skill-cabinet", "archive");
+
 const SKIP_HOME_DOTDIRS = new Set([
   ".cache",
   ".local",
@@ -34,7 +40,7 @@ const SKIP_WALK = new Set([
   "upstream",
 ]);
 
-function exists(p) {
+export function exists(p) {
   try {
     return fs.existsSync(p);
   } catch {
@@ -42,7 +48,7 @@ function exists(p) {
   }
 }
 
-function isDir(p) {
+export function isDir(p) {
   try {
     return fs.statSync(p).isDirectory();
   } catch {
@@ -70,13 +76,13 @@ const IGNORE_LOOSE_MD = new Set([
   "licence.md",
 ]);
 
-function isSkillFileName(name) {
+export function isSkillFileName(name) {
   if (NAMED_SKILL_FILES.has(name)) return true;
   if (!/\.md$/i.test(name)) return false;
   return !IGNORE_LOOSE_MD.has(name.toLowerCase());
 }
 
-function findSkillFile(dir) {
+export function findSkillFile(dir) {
   for (const name of ["SKILL.md", "skill.md"]) {
     const p = path.join(dir, name);
     if (exists(p) && !isDir(p)) return p;
@@ -115,7 +121,7 @@ function describeInstall(p) {
   return { link, file, linkTarget };
 }
 
-function contained(child, parent) {
+export function contained(child, parent) {
   const c = path.resolve(child);
   const p = path.resolve(parent);
   return c === p || c.startsWith(p + path.sep);
@@ -377,12 +383,12 @@ export function discoverRoots() {
   const roots = [];
   const seen = new Set();
 
-  const add = (scopeId, scopeLabel, root, kind, recursive = false) => {
+  const add = (scopeId, scopeLabel, root, kind, recursive = false, fromScope = "") => {
     if (!exists(root) || !isDir(root)) return;
     const resolved = real(root);
     if (seen.has(resolved)) return;
     seen.add(resolved);
-    roots.push({ scopeId, scopeLabel, root: resolved, kind, recursive });
+    roots.push({ scopeId, scopeLabel, root: resolved, kind, recursive, fromScope });
   };
 
   let homeEntries = [];
@@ -436,6 +442,28 @@ export function discoverRoots() {
     "user",
     false,
   );
+
+  // The archive is laid out as archive/<origin scope>/<slug>, so every origin
+  // folder registers as a root of its own. They share one scope id on purpose:
+  // that is what collapses them into a single Archive drawer in the tray, while
+  // fromScope still remembers which drawer each card was filed out of.
+  let archiveScopes = [];
+  try {
+    archiveScopes = fs.readdirSync(ARCHIVE_ROOT, { withFileTypes: true });
+  } catch {
+    archiveScopes = [];
+  }
+  for (const entry of archiveScopes) {
+    if (!entry.isDirectory()) continue;
+    add(
+      "archive",
+      "Archive",
+      path.join(ARCHIVE_ROOT, entry.name),
+      "archive",
+      false,
+      entry.name,
+    );
+  }
 
   return roots;
 }
@@ -584,6 +612,8 @@ function summarizeSkill(item) {
     file: Boolean(item.file),
     link: Boolean(item.link),
     linkTarget: item.linkTarget || "",
+    archived: root.kind === "archive",
+    fromScope: root.fromScope || "",
     origin: inferOrigin(dir, data, item.linkTarget),
     mtime,
     skillSize: size,
@@ -690,13 +720,16 @@ export function readSkillFile(summary, relPath) {
   };
 }
 
-export function assertDeletable(summary, roots) {
+// The one gate every destructive or relocating action goes through. Archive and
+// delete share it deliberately: two copies of this check would drift, and the
+// half that drifted would be the half that stops a stray path from being moved.
+export function assertSkillTarget(summary, roots, action = "delete") {
   const target = path.resolve(summary.path);
   const ok = roots.some((r) => contained(target, r.root) && path.resolve(r.root) !== target);
   if (!ok || target === HOME) {
     const err = new Error(
       ok
-        ? "Refusing to delete a cabinet root"
+        ? `Refusing to ${action} a cabinet root`
         : "Skill is outside known cabinet roots",
     );
     err.status = 403;
@@ -711,6 +744,10 @@ export function assertDeletable(summary, roots) {
     throw err;
   }
   return target;
+}
+
+export function assertDeletable(summary, roots) {
+  return assertSkillTarget(summary, roots, "delete");
 }
 
 export function deleteSkillDir(target) {

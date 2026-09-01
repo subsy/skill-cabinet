@@ -24,12 +24,24 @@ export function fetchSkillFile(id, relPath) {
   return json(fetch(`/api/skills/${id}/file?${q}`, { headers }));
 }
 
-export function deleteSkills(ids) {
+function post(route, ids) {
   return json(
-    fetch("/api/skills/delete", {
+    fetch(`/api/skills/${route}`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     }),
   );
+}
+
+export function deleteSkills(ids) {
+  return post("delete", ids);
+}
+
+export function archiveSkills(ids) {
+  return post("archive", ids);
+}
+
+export function restoreSkills(ids) {
+  return post("restore", ids);
 }

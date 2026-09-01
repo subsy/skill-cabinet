@@ -16,6 +16,7 @@
     "dev": "concurrently -k -n api,web -c blue,green \"node --watch server/index.js\" \"vite\"",
     "build": "vite build",
     "start": "node bin/skill-cabinet.js",
+    "test": "node --test",
     "prepare": "node scripts/ensure-dist.js",
     "prepublishOnly": "npm run build"
   },

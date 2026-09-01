@@ -20,20 +20,30 @@ npm run build
 npm start
 ```
 
+Tests use the Node test runner. They point `HOME` at a scratch directory, so they
+never touch your own drawers.
+
+```bash
+npm test
+```
+
 ## Layout
 
 - `src/` Vite + React UI
 - `server/` scan and HTTP API
+- `server/archive.js` archive and restore, and the manifest that remembers where each archived skill came from
 - `bin/skill-cabinet.js` production entry
+- `test/` Node test runner suites
 - `PRODUCT.md` users, tone, and design principles
 
 ## Pull requests
 
 - One concern per PR.
-- Match the existing copy: library language, not startup language. Destructive actions say **Delete**.
+- Match the existing copy: library language, not startup language. Destructive actions say **Delete**, and only they wear the stamp.
 - Do not bind the server to a public interface.
+- Anything that moves or removes a skill on disk goes through `assertSkillTarget`. Do not add a second copy of that check.
 - Do not commit secrets, `.env` files, or `dist/`.
-- `npm run build` should succeed.
+- `npm run build` and `npm test` should both pass.
 
 Open an issue first for large scans, new skill roots, or destructive-path changes.
 

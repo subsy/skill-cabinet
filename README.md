@@ -2,7 +2,7 @@
 
 <img src="public/logo.svg" alt="Skill Cabinet logo" width="64" height="64">
 
-A local catalog for agent skills installed on your machine. It scans user-level drawers such as `.agents`, `.claude`, `.codex`, `.cursor` (including plugins), and other `~/.* /skills` folders, lets you read each skill and its frontmatter, and can delete skill folders from disk.
+A local catalog for agent skills installed on your machine. It scans user-level drawers such as `.agents`, `.claude`, `.codex`, `.cursor` (including plugins), and other `~/.* /skills` folders, lets you read each skill and its frontmatter, and can archive or delete skill folders from disk.
 
 ## Run
 
@@ -34,12 +34,17 @@ Requires Node 20+.
 - Read the skill body (rendered or source), YAML frontmatter, and extra files
 - See whether a skill is a folder, a file, or a symlink
 - Follow a GitHub origin when the skill names it, or when the install path encodes it. Origins taken from a parent plugin or git remote are marked inferred.
+- Archive one skill or several at once, and restore them later
 - Delete one skill or several at once
 - Switch skins from the Theme menu (Carbon is the default)
 
-**Delete** removes the skill from disk (folder, file, or link). There is no undo. Builtin Cursor skills and plugin-cache copies may come back the next time that tool updates.
+**Archive** moves the skill out of its drawer and into `~/.skill-cabinet/archive/<drawer>/`. Your agents stop loading it, because no agent reads that folder, but the copy is kept. Archived skills get their own drawer at the bottom of the list, outside the count of what is installed. **Restore** puts one back at the exact path it came from; if something is already there, the archived copy stays where it is and tells you.
 
-Keys: `j`/`k` move, `/` find, `x` mark, `d` delete.
+A symlinked skill is archived as a link, so the repository it points at is never touched. Archiving the same skill twice keeps both copies.
+
+**Delete** removes the skill from disk (folder, file, or link). There is no undo. Builtin Cursor skills and plugin-cache copies may come back the next time that tool updates, whether you archive them or delete them.
+
+Keys: `j`/`k` move, `/` find, `x` mark, `a` archive, `r` restore, `d` delete.
 
 ## Develop
 
@@ -57,6 +62,12 @@ Then open [http://127.0.0.1:5173](http://127.0.0.1:5173). Production mode after 
 ```bash
 npm run build
 npm start
+```
+
+Tests run on the Node test runner, with no extra dependencies:
+
+```bash
+npm test
 ```
 
 ## License
