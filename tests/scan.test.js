@@ -56,6 +56,16 @@ async function makeHome() {
   return home;
 }
 
+test("keeps quarantine warning bindings in sync", () => {
+  const source = fs.readFileSync(
+    path.join(import.meta.dirname, "..", "src", "App.jsx"),
+    "utf8",
+  );
+
+  assert.equal(source.includes("{builtin.length"), false);
+  assert.equal((source.match(/regenerated\.length/g) || []).length, 2);
+});
+
 test("discovers nested Hermes profile skills with profile labels", async () => {
   const home = await makeHome();
   const { skills } = scanSkills(home);

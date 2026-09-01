@@ -493,9 +493,9 @@ function QuarantineConfirm({ slip, busy, onCancel, onConfirm }) {
         This moves the skill folder to ~/.skill-cabinet-quarantine. Its original
         path is recorded in manifest.json so it can be restored manually.
       </p>
-      {builtin.length > 0 && (
+      {regenerated.length > 0 && (
         <p className="warning">
-          {builtin.length} of these live in a plugin cache or builtin drawer and
+          {regenerated.length} of these live in a plugin cache or builtin drawer and
           may return the next time that tool updates.
         </p>
       )}
