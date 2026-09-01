@@ -66,6 +66,28 @@ test("keeps quarantine warning bindings in sync", () => {
   assert.equal((source.match(/regenerated\.length/g) || []).length, 2);
 });
 
+test("does not index archived Hermes profile skills", async () => {
+  const home = await makeHome();
+  const archived = path.join(
+    home,
+    ".hermes",
+    "profiles",
+    "coding",
+    "skills",
+    ".archive",
+    "old-skill",
+  );
+  await fs.promises.mkdir(archived, { recursive: true });
+  await fs.promises.writeFile(
+    path.join(archived, "SKILL.md"),
+    "---\nname: old-skill\n---\n\n# Archived\n",
+  );
+
+  const { skills } = scanSkills(home);
+
+  assert.equal(skills.some((skill) => skill.name === "old-skill"), false);
+});
+
 test("discovers nested Hermes profile skills with profile labels", async () => {
   const home = await makeHome();
   const { skills } = scanSkills(home);

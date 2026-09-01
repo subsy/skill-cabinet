@@ -32,6 +32,7 @@ const SKIP_WALK = new Set([
   ".git",
   "dist",
   ".cache",
+  ".archive",
   "upstream",
 ]);
 
