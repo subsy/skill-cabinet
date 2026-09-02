@@ -36,15 +36,23 @@ export function findSkillHooks(skillDir, { fileOnly = false } = {}) {
   return hooksAt(skillDir);
 }
 
-function clauseBefore(text, index) {
-  const before = text.slice(0, index);
-  const cut = Math.max(
+function lastClauseCut(before) {
+  let cut = Math.max(
     before.lastIndexOf("."),
     before.lastIndexOf("!"),
     before.lastIndexOf("?"),
     before.lastIndexOf(";"),
   );
-  return before.slice(cut + 1);
+  const coord = /(?:,\s*)?\b(?:but|yet)\b|,\s*\b(?:and|or)\b/gi;
+  for (const match of before.matchAll(coord)) {
+    cut = Math.max(cut, match.index + match[0].length - 1);
+  }
+  return cut;
+}
+
+function clauseBefore(text, index) {
+  const before = text.slice(0, index);
+  return before.slice(lastClauseCut(before) + 1);
 }
 
 function negationApplies(clause) {

@@ -199,6 +199,20 @@ test("a negated sentence does not hide a later standing order", () => {
   }
 });
 
+test("a but-clause standing order is still a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Do not run on every request, but must always apply.",
+    });
+    assert.equal(result.invocation, "hook");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("disable-model-invocation and user-invokable false is off", () => {
   const dir = tempDir();
   try {
