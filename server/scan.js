@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import YAML from "yaml";
 import { auditSkill } from "./audit.js";
 import { deleteEffect } from "./delete-effect.js";
+import { skillInvocation } from "./invocation.js";
 
 export { deleteEffect };
 
@@ -586,6 +587,8 @@ function danglingSummary(item) {
     link: true,
     linkTarget: item.linkTarget || "",
     origin: null,
+    invocation: "model",
+    invocationEvidence: "",
     contentHash: null,
     risk: "none",
     findings: [],
@@ -629,6 +632,12 @@ function summarizeSkill(item) {
     text,
     fileOnly: Boolean(item.file),
   });
+  const when = skillInvocation({
+    skillDir: dir,
+    fileOnly: Boolean(item.file),
+    frontmatter: data,
+    description,
+  });
 
   return {
     id: idFor(dir),
@@ -646,6 +655,8 @@ function summarizeSkill(item) {
     link: Boolean(item.link),
     linkTarget: item.linkTarget || "",
     origin: inferOrigin(dir, data, item.linkTarget),
+    invocation: when.invocation,
+    invocationEvidence: when.invocationEvidence,
     contentHash: crypto.createHash("sha256").update(raw).digest("hex"),
     risk: audited.severity,
     findings: audited.findings,
@@ -762,6 +773,8 @@ export function toCatalogSkill(skill) {
     link: skill.link,
     linkTarget: skill.linkTarget,
     origin: skill.origin,
+    invocation: skill.invocation,
+    invocationEvidence: skill.invocationEvidence,
     risk: skill.risk,
     physicality: skill.physicality,
     refTarget: skill.refTarget,

@@ -470,7 +470,7 @@ h3 {
 .tray-filters {
   grid-area: filters;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-s);
   min-width: 0;
 }
@@ -642,6 +642,16 @@ h3 {
   color: var(--ink-soft);
   text-transform: none;
   letter-spacing: 0.04em;
+}
+
+.meta [data-invoke="user"],
+.stamps [data-invoke="user"] {
+  color: var(--kind-user);
+}
+
+.meta [data-invoke="hook"],
+.stamps [data-invoke="hook"] {
+  color: var(--stamp);
 }
 
 .tick {

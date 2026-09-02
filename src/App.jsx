@@ -12,15 +12,19 @@ import Logo from "./Logo.jsx";
 import {
   LINK_FILTERS,
   RISK_FILTERS,
+  WHEN_FILTERS,
   THEMES,
   applyTheme,
   matchesLinkFilter,
   matchesRiskFilter,
+  matchesWhenFilter,
   readStoredLinkFilter,
   readStoredRiskFilter,
+  readStoredWhenFilter,
   readStoredTheme,
   writeStoredLinkFilter,
   writeStoredRiskFilter,
+  writeStoredWhenFilter,
   writeStoredTheme,
 } from "./themes.js";
 import { deleteEffect } from "../server/delete-effect.js";
@@ -66,6 +70,12 @@ function matchesQuery(skill, q) {
     skill.origin?.url || "",
     skill.risk && skill.risk !== "none" ? `risk ${skill.risk}` : "",
     skill.copyCount ? `copy copies ${skill.copyCount}` : "",
+    skill.invocation === "hook"
+      ? "hook every request"
+      : skill.invocation === "user"
+        ? "user only"
+        : "model may call",
+    skill.invocationEvidence || "",
   ]
     .join("\n")
     .toLowerCase();
@@ -124,6 +134,12 @@ function riskStamp(risk) {
   return "";
 }
 
+function invokeStamp(mode) {
+  if (mode === "hook") return "hook";
+  if (mode === "user") return "user only";
+  return "";
+}
+
 function copyStamp(copies, copyCount) {
   const n = copyCount ?? copies?.length ?? 0;
   if (!n) return "";
@@ -159,6 +175,14 @@ function formStamps(skill, { origin = "attested" } = {}) {
     marks.push(
       <span key="risk" data-risk={skill.risk}>
         {risk}
+      </span>,
+    );
+  }
+  const when = invokeStamp(skill.invocation);
+  if (when) {
+    marks.push(
+      <span key="when" data-invoke={skill.invocation} title={skill.invocationEvidence || ""}>
+        {when}
       </span>,
     );
   }
@@ -232,6 +256,25 @@ function RiskFilterSelect({ value, onChange }) {
   );
 }
 
+function WhenFilterSelect({ value, onChange }) {
+  return (
+    <label className="tray-filter">
+      <span>When</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label="When the skill runs"
+      >
+        {WHEN_FILTERS.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export default function App() {
   const [catalog, setCatalog] = useState(null);
   const [error, setError] = useState("");
@@ -249,6 +292,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [linkFilter, setLinkFilter] = useState(readStoredLinkFilter);
   const [riskFilter, setRiskFilter] = useState(readStoredRiskFilter);
+  const [whenFilter, setWhenFilter] = useState(readStoredWhenFilter);
   const searchRef = useRef(null);
   const listRef = useRef(null);
   const markAllRef = useRef(null);
@@ -277,9 +321,12 @@ export default function App() {
   const linked = useMemo(
     () =>
       skills.filter(
-        (s) => matchesLinkFilter(s, linkFilter) && matchesRiskFilter(s, riskFilter),
+        (s) =>
+          matchesLinkFilter(s, linkFilter) &&
+          matchesRiskFilter(s, riskFilter) &&
+          matchesWhenFilter(s, whenFilter),
       ),
-    [skills, linkFilter, riskFilter],
+    [skills, linkFilter, riskFilter, whenFilter],
   );
 
   const visible = useMemo(() => {
@@ -592,6 +639,13 @@ export default function App() {
                   setRiskFilter(next);
                 }}
               />
+              <WhenFilterSelect
+                value={whenFilter}
+                onChange={(next) => {
+                  writeStoredWhenFilter(next);
+                  setWhenFilter(next);
+                }}
+              />
             </div>
           </div>
           <ol ref={listRef} className="cards">
@@ -758,8 +812,13 @@ function SkillLeaf({
   const copies = (detail?.copies?.length ? detail.copies : selected.copies) || [];
   const findings = detail?.findings || selected.findings || [];
   const skillRel = selected.skillRel || "SKILL.md";
-  const showDisk =
-    selected.file || selected.link || selected.origin || copies.length > 0;
+  const showDisk = true;
+  const whenLabel =
+    selected.invocation === "hook"
+      ? "hook"
+      : selected.invocation === "user"
+        ? "user only"
+        : "model may call";
   const body = preview
     ? preview.binary
       ? `Binary file · ${formatBytes(preview.size)}`
@@ -820,6 +879,17 @@ function SkillLeaf({
             <div>
               <dt>form</dt>
               <dd>{selected.file ? "file" : "folder"}</dd>
+            </div>
+            <div>
+              <dt>when</dt>
+              <dd>
+                {whenLabel}
+                {selected.invocationEvidence ? (
+                  <code title={selected.invocationEvidence}>
+                    {selected.invocationEvidence}
+                  </code>
+                ) : null}
+              </dd>
             </div>
             {selected.link ? (
               <div>

@@ -109,3 +109,36 @@ export function matchesRiskFilter(skill, filter) {
   if (filter === "hide") return !elevated;
   return true;
 }
+
+export const WHEN_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "user", label: "User only" },
+  { id: "model", label: "Model" },
+  { id: "hook", label: "Hook" },
+];
+
+const WHEN_KEY = "skill-cabinet-when";
+const WHEN_IDS = new Set(WHEN_FILTERS.map((t) => t.id));
+
+export function readStoredWhenFilter() {
+  try {
+    const value = localStorage.getItem(WHEN_KEY);
+    if (value && WHEN_IDS.has(value)) return value;
+  } catch {
+    /* private mode */
+  }
+  return "all";
+}
+
+export function writeStoredWhenFilter(id) {
+  try {
+    localStorage.setItem(WHEN_KEY, id);
+  } catch {
+    /* private mode */
+  }
+}
+
+export function matchesWhenFilter(skill, filter) {
+  if (filter === "all") return true;
+  return (skill.invocation || "model") === filter;
+}

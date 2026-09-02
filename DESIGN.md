@@ -12,7 +12,7 @@ A working catalog on a desk: drawers, index cards, a reading surface. The operat
 
 - **Masthead:** Instrument Serif italic wordmark, a find field, house census, theme.
 - **Drawers:** one per install scope. Counts follow the tray filters. The house census does not.
-- **Tray:** index cards. Stamps are cataloguing (kind, form, origin, copies, risk), not badges for their own sake.
+- **Tray:** index cards. Stamps are cataloguing (kind, form, origin, copies, risk, when), not badges for their own sake.
 - **Reader:** the skill body at a readable measure. Frontmatter, on-disk facts, risk, and copies sit above the manuscript as cataloguing, not a settings panel.
 
 Ten named skins live in `src/themes.css`. Carbon is the first-run default. Skins may change type, chrome, and stamp geometry. They must not become a neon dashboard.
