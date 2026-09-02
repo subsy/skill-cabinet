@@ -48,11 +48,23 @@ export function readManifest() {
 
 function writeManifest(manifest) {
   fs.mkdirSync(quarantineRoot(), { recursive: true });
-  fs.writeFileSync(
-    manifestPath(),
-    `${JSON.stringify({ version: 1, entries: manifest.entries }, null, 2)}\n`,
-    "utf8",
-  );
+  const dest = manifestPath();
+  const tmp = `${dest}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(
+      tmp,
+      `${JSON.stringify({ version: 1, entries: manifest.entries }, null, 2)}\n`,
+      "utf8",
+    );
+    fs.renameSync(tmp, dest);
+  } catch (err) {
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {
+      /* leave the tmp */
+    }
+    throw err;
+  }
 }
 
 function scopeFolder(scopeId) {
@@ -88,6 +100,19 @@ function move(source, dest) {
   fs.rmSync(source, { recursive: true, force: true });
 }
 
+function persistAfterMove(from, to, persist) {
+  try {
+    persist();
+  } catch (err) {
+    try {
+      move(to, from);
+    } catch {
+      /* the copy now lives only at to */
+    }
+    throw err;
+  }
+}
+
 function pruneScopeDir(dir) {
   const resolved = path.resolve(dir);
   if (resolved === path.resolve(quarantineRoot())) return;
@@ -108,24 +133,25 @@ export function quarantineSkill(summary, roots) {
   const dest = freeQuarantinePath(scopeDir, path.basename(source));
 
   move(source, dest);
-
-  const manifest = readManifest();
-  manifest.entries = manifest.entries.filter(
-    (entry) => path.resolve(entry.quarantinePath) !== path.resolve(dest),
-  );
-  manifest.entries.push({
-    quarantinePath: dest,
-    originPath: source,
-    name: summary.name,
-    slug: summary.slug,
-    scopeId: summary.scopeId,
-    scopeLabel: summary.scopeLabel,
-    kind: summary.kind,
-    file: Boolean(summary.file),
-    link: Boolean(summary.link),
-    quarantinedAt: Date.now(),
+  persistAfterMove(source, dest, () => {
+    const manifest = readManifest();
+    manifest.entries = manifest.entries.filter(
+      (entry) => path.resolve(entry.quarantinePath) !== path.resolve(dest),
+    );
+    manifest.entries.push({
+      quarantinePath: dest,
+      originPath: source,
+      name: summary.name,
+      slug: summary.slug,
+      scopeId: summary.scopeId,
+      scopeLabel: summary.scopeLabel,
+      kind: summary.kind,
+      file: Boolean(summary.file),
+      link: Boolean(summary.link),
+      quarantinedAt: Date.now(),
+    });
+    writeManifest(manifest);
   });
-  writeManifest(manifest);
 
   return { from: source, to: dest };
 }
@@ -163,12 +189,13 @@ export function restoreSkill(summary, roots) {
   }
 
   move(source, dest);
-
-  manifest.entries = manifest.entries.filter(
-    (item) => path.resolve(item.quarantinePath) !== source,
-  );
-  writeManifest(manifest);
-  pruneScopeDir(path.dirname(source));
+  persistAfterMove(source, dest, () => {
+    manifest.entries = manifest.entries.filter(
+      (item) => path.resolve(item.quarantinePath) !== source,
+    );
+    writeManifest(manifest);
+    pruneScopeDir(path.dirname(source));
+  });
 
   return { from: source, to: dest };
 }

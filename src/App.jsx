@@ -30,6 +30,7 @@ import {
   writeStoredTheme,
 } from "./themes.js";
 import { deleteEffect } from "../server/delete-effect.js";
+import { crossingQuarantineShelf, idsForShelfAction } from "./shelf-actions.js";
 
 function formatBytes(n) {
   if (!n) return "0 B";
@@ -410,7 +411,11 @@ export default function App() {
     });
   }, [live, quarantined, inQuarantine, scopeId, query]);
 
-  const markedCount = checked.size;
+  const markedOnShelf = useMemo(
+    () => visible.filter((s) => checked.has(s.id)).map((s) => s.id),
+    [visible, checked],
+  );
+  const markedCount = markedOnShelf.length;
   const allVisibleMarked =
     visible.length > 0 && visible.every((s) => checked.has(s.id));
 
@@ -518,11 +523,17 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visible, selectedId, checked, slip, inQuarantine]);
+  }, [visible, selectedId, checked, slip, inQuarantine, markedOnShelf]);
 
   function marked() {
-    if (checked.size) return [...checked];
+    if (markedOnShelf.length) return markedOnShelf;
     return selectedId ? [selectedId] : [];
+  }
+
+  function openScope(nextId) {
+    setSlip(null);
+    if (crossingQuarantineShelf(scopeId, nextId)) setChecked(new Set());
+    setScopeId(nextId);
   }
 
   function toggleChecked(id) {
@@ -546,11 +557,12 @@ export default function App() {
   }
 
   function openSlip(ids, mode) {
-    if (!ids.length) return;
-    const cards = ids
+    const actionable = idsForShelfAction(ids, skills, mode);
+    if (!actionable.length) return;
+    const cards = actionable
       .map((id) => skills.find((s) => s.id === id))
       .filter(Boolean);
-    setSlip({ ids, cards, mode });
+    setSlip({ ids: actionable, cards, mode });
   }
 
   async function confirmSlip() {
@@ -658,10 +670,7 @@ export default function App() {
           <button
             type="button"
             className={scopeId === "all" ? "drawer on" : "drawer"}
-            onClick={() => {
-              setSlip(null);
-              setScopeId("all");
-            }}
+            onClick={() => openScope("all")}
           >
             <i />
             <span>All drawers</span>
@@ -672,10 +681,7 @@ export default function App() {
               key={scope.id}
               type="button"
               className={scopeId === scope.id ? "drawer on" : "drawer"}
-              onClick={() => {
-                setSlip(null);
-                setScopeId(scope.id);
-              }}
+              onClick={() => openScope(scope.id)}
             >
               <i data-kind={scope.kind} />
               <span>{scope.label}</span>
@@ -685,10 +691,7 @@ export default function App() {
           <button
             type="button"
             className={inQuarantine ? "drawer quarantine on" : "drawer quarantine"}
-            onClick={() => {
-              setSlip(null);
-              setScopeId("quarantine");
-            }}
+            onClick={() => openScope("quarantine")}
             title={`Held out of every drawer an agent reads · ${quarantinePath}`}
           >
             <i data-kind="quarantine" />
@@ -717,7 +720,7 @@ export default function App() {
                   type="button"
                   className="shelve"
                   onClick={() =>
-                    openSlip([...checked], inQuarantine ? "restore" : "quarantine")
+                    openSlip(markedOnShelf, inQuarantine ? "restore" : "quarantine")
                   }
                 >
                   {inQuarantine ? "Restore" : "Quarantine"}
@@ -725,7 +728,7 @@ export default function App() {
                 <button
                   type="button"
                   className="stamp"
-                  onClick={() => openSlip([...checked], "delete")}
+                  onClick={() => openSlip(markedOnShelf, "delete")}
                 >
                   Delete
                 </button>

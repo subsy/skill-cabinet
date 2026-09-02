@@ -295,3 +295,76 @@ test("deleting a quarantined skill drops its quarantine record", () => {
     false,
   );
 });
+
+function withReadOnlyQuarantineRoot(fn) {
+  const root = quarantineRoot();
+  const mode = fs.statSync(root).mode;
+  fs.chmodSync(root, 0o555);
+  let blocked = false;
+  try {
+    fs.writeFileSync(path.join(root, ".perm-probe"), "x");
+  } catch {
+    blocked = true;
+  }
+  try {
+    if (!blocked) return false;
+    fn();
+    return true;
+  } finally {
+    fs.chmodSync(root, mode);
+    try {
+      fs.rmSync(path.join(root, ".perm-probe"), { force: true });
+    } catch {
+      /* gone */
+    }
+  }
+}
+
+test("a leftover manifest tmp file does not replace the live records", () => {
+  const origin = writeSkill(path.join(drawer(".claude"), "november"), "november");
+  const { index, skill } = cardAt(origin);
+  quarantineSkill(skill, index.roots);
+  const dest = path.join(quarantineRoot(), "quarantine.json");
+  fs.writeFileSync(`${dest}.99999.tmp`, "{not json", "utf8");
+  assert.equal(
+    readManifest().entries.some((e) => e.originPath === origin),
+    true,
+  );
+});
+
+test("a failed manifest write rolls the skill back to its drawer", () => {
+  const kept = writeSkill(path.join(drawer(".claude"), "lima"), "lima");
+  const first = cardAt(kept);
+  quarantineSkill(first.skill, first.index.roots);
+  const origin = writeSkill(path.join(drawer(".claude"), "mike"), "mike");
+
+  const ran = withReadOnlyQuarantineRoot(() => {
+    const second = cardAt(origin);
+    assert.throws(() => quarantineSkill(second.skill, second.index.roots));
+    assert.equal(occupied(path.join(origin, "SKILL.md")), true);
+  });
+  if (!ran) return;
+
+  assert.equal(
+    readManifest().entries.some((e) => e.originPath === kept),
+    true,
+  );
+  assert.equal(
+    readManifest().entries.some((e) => e.originPath === origin),
+    false,
+  );
+});
+
+test("a failed restore write puts the skill back in the quarantine", () => {
+  const origin = writeSkill(path.join(drawer(".claude"), "oscar"), "oscar");
+  const { index, skill } = cardAt(origin);
+  const moved = quarantineSkill(skill, index.roots);
+
+  const ran = withReadOnlyQuarantineRoot(() => {
+    const held = cardAt(moved.to);
+    assert.throws(() => restoreSkill(held.skill, held.index.roots));
+    assert.equal(occupied(path.join(moved.to, "SKILL.md")), true);
+    assert.equal(occupied(origin), false);
+  });
+  if (!ran) return;
+});
