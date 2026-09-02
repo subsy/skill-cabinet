@@ -654,6 +654,11 @@ h3 {
   color: var(--stamp);
 }
 
+.meta [data-invoke="off"],
+.stamps [data-invoke="off"] {
+  color: var(--ink-soft);
+}
+
 .tick {
   position: absolute;
   right: 0.55rem;

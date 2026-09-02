@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const STANDING_ORDER =
-  /\b(?:must\s+always\s+apply|always\s+apply|on\s+every\s+(?:request|turn|message|prompt)|before\s+every\s+(?:request|turn|message|prompt)|hooked\s+into\s+every|injected\s+at\s+session\s+start)\b/i;
+  /\b(?:must\s+always\s+apply|always\s+apply|on\s+every\s+(?:request|turn|message|prompt)|before\s+every\s+(?:request|turn|message|prompt)|hooked\s+into\s+every|injected\s+at\s+session\s+start)\b/gi;
+
+const NEGATION =
+  /\b(?:do\s+not|don't|does\s+not|doesn't|can\s+not|can't|cannot|never|not)\s+$/i;
 
 function exists(p) {
   try {
@@ -16,6 +19,10 @@ function isTruthy(value) {
   return value === true || value === "true" || value === "yes";
 }
 
+function isFalsy(value) {
+  return value === false || value === "false" || value === "no";
+}
+
 function hooksAt(dir) {
   const nested = path.join(dir, "hooks", "hooks.json");
   if (exists(nested)) return nested;
@@ -25,8 +32,18 @@ function hooksAt(dir) {
 }
 
 export function findSkillHooks(skillDir, { fileOnly = false } = {}) {
-  const start = fileOnly ? path.dirname(skillDir) : skillDir;
-  return hooksAt(start);
+  if (fileOnly) return "";
+  return hooksAt(skillDir);
+}
+
+export function hasStandingOrder(text) {
+  if (!text) return false;
+  const re = new RegExp(STANDING_ORDER.source, "gi");
+  for (const match of text.matchAll(re)) {
+    const before = text.slice(Math.max(0, match.index - 32), match.index);
+    if (!NEGATION.test(before)) return true;
+  }
+  return false;
 }
 
 export function skillInvocation({
@@ -64,7 +81,7 @@ export function skillInvocation({
   }
 
   const blurb = description || (typeof frontmatter.description === "string" ? frontmatter.description : "");
-  if (STANDING_ORDER.test(blurb)) {
+  if (hasStandingOrder(blurb)) {
     return {
       invocation: "hook",
       invocationEvidence: "description standing order",
@@ -72,6 +89,15 @@ export function skillInvocation({
   }
 
   if (isTruthy(frontmatter["disable-model-invocation"])) {
+    const userInvokable =
+      frontmatter["user-invokable"] ?? meta["user-invokable"];
+    if (isFalsy(userInvokable)) {
+      return {
+        invocation: "off",
+        invocationEvidence:
+          "frontmatter disable-model-invocation and user-invokable false",
+      };
+    }
     return {
       invocation: "user",
       invocationEvidence: "frontmatter disable-model-invocation",

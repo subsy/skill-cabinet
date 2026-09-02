@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { skillInvocation } from "./invocation.js";
+import { scanRoots } from "./scan.js";
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "skill-cabinet-invoke-"));
@@ -109,6 +110,103 @@ test("hooks.json in the skill folder is a hook", () => {
     });
     assert.equal(result.invocation, "hook");
     assert.match(result.invocationEvidence, /hooks\.json/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("do not always apply is not a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Do not always apply this. Use it when the user asks.",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("never on every request is not a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Never on every request. Call it when needed.",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("disable-model-invocation and user-invokable false is off", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {
+        "disable-model-invocation": true,
+        "user-invokable": false,
+      },
+      description: "Held",
+    });
+    assert.equal(result.invocation, "off");
+    assert.match(result.invocationEvidence, /user-invokable/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("hooks.json beside a loose markdown skill is not this skill's hook", () => {
+  const dir = tempDir();
+  try {
+    const file = path.join(dir, "note.md");
+    fs.writeFileSync(file, "---\nname: note\n---\n\nBody.\n");
+    fs.writeFileSync(path.join(dir, "hooks.json"), "{}\n");
+    const result = skillInvocation({
+      skillDir: file,
+      fileOnly: true,
+      frontmatter: {},
+      description: "A loose note",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a shared drawer hooks.json does not hook neighboring loose skills", () => {
+  const dir = tempDir();
+  try {
+    const skillsDir = path.join(dir, "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillsDir, "alpha.md"),
+      "---\nname: alpha\ndescription: First loose skill\n---\n\nA.\n",
+    );
+    fs.writeFileSync(
+      path.join(skillsDir, "beta.md"),
+      "---\nname: beta\ndescription: Second loose skill\n---\n\nB.\n",
+    );
+    fs.writeFileSync(path.join(skillsDir, "hooks.json"), "{}\n");
+    const result = scanRoots([
+      {
+        scopeId: "skills",
+        scopeLabel: "skills",
+        root: skillsDir,
+        kind: "user",
+        recursive: false,
+      },
+    ]);
+    const alpha = result.skills.find((s) => s.slug === "alpha");
+    const beta = result.skills.find((s) => s.slug === "beta");
+    assert.ok(alpha && beta, "both loose skills exist");
+    assert.equal(alpha.invocation, "model");
+    assert.equal(beta.invocation, "model");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

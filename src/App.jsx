@@ -74,7 +74,9 @@ function matchesQuery(skill, q) {
       ? "hook every request"
       : skill.invocation === "user"
         ? "user only"
-        : "model may call",
+        : skill.invocation === "off"
+          ? "off disabled"
+          : "model may call",
     skill.invocationEvidence || "",
   ]
     .join("\n")
@@ -137,6 +139,7 @@ function riskStamp(risk) {
 function invokeStamp(mode) {
   if (mode === "hook") return "hook";
   if (mode === "user") return "user only";
+  if (mode === "off") return "off";
   return "";
 }
 
@@ -818,7 +821,9 @@ function SkillLeaf({
       ? "hook"
       : selected.invocation === "user"
         ? "user only"
-        : "model may call";
+        : selected.invocation === "off"
+          ? "off"
+          : "model may call";
   const body = preview
     ? preview.binary
       ? `Binary file · ${formatBytes(preview.size)}`

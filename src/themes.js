@@ -115,6 +115,7 @@ export const WHEN_FILTERS = [
   { id: "user", label: "User only" },
   { id: "model", label: "Model" },
   { id: "hook", label: "Hook" },
+  { id: "off", label: "Off" },
 ];
 
 const WHEN_KEY = "skill-cabinet-when";
