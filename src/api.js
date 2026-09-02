@@ -33,3 +33,23 @@ export function deleteSkills(ids) {
     }),
   );
 }
+
+export function quarantineSkills(ids) {
+  return json(
+    fetch("/api/skills/quarantine", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }),
+  );
+}
+
+export function restoreSkills(ids) {
+  return json(
+    fetch("/api/skills/restore", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }),
+  );
+}

@@ -10,7 +10,14 @@ import {
   assertDeletable,
   deleteSkillDir,
   toCatalogSkill,
+  quarantineRoot,
 } from "./scan.js";
+import {
+  quarantineSkill,
+  restoreSkill,
+  quarantineRecordFor,
+  forgetQuarantinePath,
+} from "./quarantine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -45,9 +52,10 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/skills", (req, res) => {
   try {
     const index = getIndex(req.query.refresh === "1");
+    const live = index.skills.filter((skill) => !skill.quarantined);
     const scopes = [];
     const byScope = new Map();
-    for (const skill of index.skills) {
+    for (const skill of live) {
       if (!byScope.has(skill.scopeId)) {
         byScope.set(skill.scopeId, {
           id: skill.scopeId,
@@ -62,7 +70,8 @@ app.get("/api/skills", (req, res) => {
     res.json({
       home: process.env.HOME,
       scannedAt: cache.at,
-      total: index.skills.length,
+      quarantineRoot: quarantineRoot(),
+      total: live.length,
       census: index.census,
       scopes,
       skills: index.skills.map(toCatalogSkill),
@@ -80,7 +89,15 @@ app.get("/api/skills/:id", (req, res) => {
       res.status(404).json({ error: "Skill not in the cabinet" });
       return;
     }
-    res.json(readSkill(summary));
+    const detail = readSkill(summary);
+    if (summary.quarantined) {
+      const record = quarantineRecordFor(summary.path);
+      if (record) {
+        detail.quarantinedFrom = record.originPath;
+        detail.quarantinedAt = record.quarantinedAt;
+      }
+    }
+    res.json(detail);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -105,6 +122,31 @@ app.get("/api/skills/:id/file", (req, res) => {
   }
 });
 
+function idsFrom(body) {
+  return Array.isArray(body?.ids) ? body.ids.map(String) : [];
+}
+
+function runOnIds(ids, act, key) {
+  const index = getIndex(true);
+  const done = [];
+  const errors = [];
+  for (const id of ids) {
+    const summary = index.byId.get(id);
+    if (!summary) {
+      errors.push({ id, error: "Skill not in the cabinet" });
+      continue;
+    }
+    try {
+      const result = act(summary, index.roots);
+      done.push({ id, name: summary.name, ...result });
+    } catch (err) {
+      errors.push({ id, error: err.message, path: summary.path });
+    }
+  }
+  cache = { at: 0, payload: null };
+  return { [key]: done, errors };
+}
+
 function deleteIds(ids) {
   const index = getIndex(true);
   const deleted = [];
@@ -118,6 +160,7 @@ function deleteIds(ids) {
     try {
       const target = assertDeletable(summary, index.roots);
       deleteSkillDir(target);
+      forgetQuarantinePath(target);
       deleted.push({ id, path: target, name: summary.name });
     } catch (err) {
       errors.push({ id, error: err.message, path: summary.path });
@@ -139,12 +182,38 @@ app.delete("/api/skills/:id", (req, res) => {
 
 app.post("/api/skills/delete", (req, res) => {
   try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = idsFrom(req.body);
     if (!ids.length) {
       res.status(400).json({ error: "No cards selected" });
       return;
     }
-    res.json(deleteIds(ids.map(String)));
+    res.json(deleteIds(ids));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/skills/quarantine", (req, res) => {
+  try {
+    const ids = idsFrom(req.body);
+    if (!ids.length) {
+      res.status(400).json({ error: "No cards selected" });
+      return;
+    }
+    res.json(runOnIds(ids, quarantineSkill, "quarantined"));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/skills/restore", (req, res) => {
+  try {
+    const ids = idsFrom(req.body);
+    if (!ids.length) {
+      res.status(400).json({ error: "No cards selected" });
+      return;
+    }
+    res.json(runOnIds(ids, restoreSkill, "restored"));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

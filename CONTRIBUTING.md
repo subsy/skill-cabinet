@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with Skill Cabinet. This is a local catalog for agent skills on disk. Keep the surface quiet, precise, and librarian: drawers, cards, a delete stamp.
+Thanks for helping with Skill Cabinet. This is a local catalog for agent skills on disk. Keep the surface quiet, precise, and librarian: drawers, cards, a delete stamp. Quarantine sits beside Delete; it is not a second stamp.
 
 ## Setup
 

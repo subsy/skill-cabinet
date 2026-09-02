@@ -434,6 +434,34 @@ h3 {
   background: var(--brass-bright);
 }
 
+/* The quarantine is not a drawer an agent reads, so it does not look like one:
+   set down from the stack, outlined rather than filled, knob unlit. */
+.drawer.quarantine {
+  margin-top: 0.9rem;
+  border-style: dashed;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+}
+
+.drawer.quarantine i {
+  background: none;
+  border: 1px solid currentColor;
+  box-shadow: none;
+}
+
+.drawer.quarantine.on {
+  border-style: solid;
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+  color: var(--paper);
+}
+
+.drawer.quarantine.on i {
+  background: none;
+  border-color: currentColor;
+}
+
 .tray {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -447,7 +475,7 @@ h3 {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: minmax(2.1rem, auto) auto;
   grid-template-areas:
-    "mark delete"
+    "mark actions"
     "filters filters";
   align-items: center;
   column-gap: var(--space-s);
@@ -461,8 +489,15 @@ h3 {
   min-width: 0;
 }
 
-.tray-head .stamp {
-  grid-area: delete;
+.tray-head .tray-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.tray-head .stamp,
+.tray-head .shelve {
   font-size: 0.72rem;
   padding: 0.35rem 0.55rem;
 }
@@ -609,6 +644,13 @@ h3 {
   color: var(--kind-builtin);
 }
 
+.meta [data-kind="quarantine"],
+.stamps [data-kind="quarantine"],
+.meta [data-from],
+.stamps [data-from] {
+  color: var(--ink-soft);
+}
+
 .meta [data-form],
 .stamps [data-form] {
   color: var(--brass);
@@ -711,7 +753,14 @@ h3 {
   min-width: 0;
 }
 
-.leaf-head > .stamp {
+.tray-actions,
+.leaf-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.leaf-head > .leaf-actions {
   justify-self: end;
   align-self: start;
 }
@@ -898,6 +947,16 @@ h3 {
   color: var(--stamp);
 }
 
+.aside {
+  color: var(--ink-soft);
+}
+
+.aside code {
+  font-family: var(--mono);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 .slip-list {
   list-style: none;
   margin: 1.2rem 0;
@@ -964,6 +1023,32 @@ h3 {
   opacity: 0.35;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Quarantine and restore are reversible, so they must not wear the stamp: same
+   type, no tilt, no alarm colour. */
+.shelve {
+  font-family: var(--chrome);
+  font-size: 0.95rem;
+  font-weight: var(--stamp-weight);
+  letter-spacing: var(--stamp-tracking);
+  text-transform: uppercase;
+  color: var(--ink);
+  background: none;
+  border: 1px solid color-mix(in oklch, var(--ink) 45%, transparent);
+  border-radius: var(--stamp-radius);
+  padding: var(--stamp-pad);
+}
+
+.shelve:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.shelve:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 @media (max-width: 960px) {
