@@ -143,6 +143,62 @@ test("never on every request is not a hook", () => {
   }
 });
 
+test("do not run on every request is not a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Do not run on every request.",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("never run on every request is not a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Never run on every request.",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("does not need to always apply is not a hook", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "This does not need to always apply.",
+    });
+    assert.equal(result.invocation, "model");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a negated sentence does not hide a later standing order", () => {
+  const dir = tempDir();
+  try {
+    const result = skillInvocation({
+      skillDir: dir,
+      frontmatter: {},
+      description: "Do not run on every request. Must always apply.",
+    });
+    assert.equal(result.invocation, "hook");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("disable-model-invocation and user-invokable false is off", () => {
   const dir = tempDir();
   try {

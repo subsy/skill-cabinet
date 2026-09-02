@@ -4,8 +4,8 @@ import path from "node:path";
 const STANDING_ORDER =
   /\b(?:must\s+always\s+apply|always\s+apply|on\s+every\s+(?:request|turn|message|prompt)|before\s+every\s+(?:request|turn|message|prompt)|hooked\s+into\s+every|injected\s+at\s+session\s+start)\b/gi;
 
-const NEGATION =
-  /\b(?:do\s+not|don't|does\s+not|doesn't|can\s+not|can't|cannot|never|not)\s+$/i;
+const VERBAL_NEGATION =
+  /\b(?:do\s+not|don't|does\s+not|doesn't|did\s+not|didn't|can\s+not|can't|cannot|never)\b/gi;
 
 function exists(p) {
   try {
@@ -36,12 +36,32 @@ export function findSkillHooks(skillDir, { fileOnly = false } = {}) {
   return hooksAt(skillDir);
 }
 
+function clauseBefore(text, index) {
+  const before = text.slice(0, index);
+  const cut = Math.max(
+    before.lastIndexOf("."),
+    before.lastIndexOf("!"),
+    before.lastIndexOf("?"),
+    before.lastIndexOf(";"),
+  );
+  return before.slice(cut + 1);
+}
+
+function negationApplies(clause) {
+  const re = new RegExp(VERBAL_NEGATION.source, "gi");
+  let last = null;
+  for (const match of clause.matchAll(re)) last = match;
+  if (!last) return false;
+  const rest = clause.slice(last.index + last[0].length).trim();
+  const words = rest ? rest.split(/\s+/).filter(Boolean) : [];
+  return words.length <= 5;
+}
+
 export function hasStandingOrder(text) {
   if (!text) return false;
   const re = new RegExp(STANDING_ORDER.source, "gi");
   for (const match of text.matchAll(re)) {
-    const before = text.slice(Math.max(0, match.index - 32), match.index);
-    if (!NEGATION.test(before)) return true;
+    if (!negationApplies(clauseBefore(text, match.index))) return true;
   }
   return false;
 }
