@@ -426,7 +426,20 @@ export function discoverRoots() {
     const scopeId = entry.name.slice(1);
 
     for (const folder of ["skills", "skill"]) {
-      add(scopeId, entry.name, path.join(base, folder), "user", false);
+      // .codex nests skills two levels deep (skills/<runtime>/<skill>/SKILL.md); deep=true recurses
+      const deep = entry.name === ".codex";
+      add(scopeId, entry.name, path.join(base, folder), "user", false, deep);
+    }
+
+    if (entry.name === ".claude") {
+      add(
+        "claude-plugins",
+        ".claude/plugins",
+        path.join(base, "plugins"),
+        "plugin",
+        false,
+        true,
+      );
     }
 
     if (entry.name === ".cursor") {
@@ -447,20 +460,23 @@ export function discoverRoots() {
     }
   }
 
-  add(
-    "gemini",
-    ".gemini/antigravity",
-    path.join(homeDir(), ".gemini/antigravity/skills"),
-    "user",
-    false,
-  );
-  add(
-    "gemini",
-    ".gemini/antigravity (global)",
-    path.join(homeDir(), ".gemini/antigravity/global_skills"),
-    "user",
-    false,
-  );
+  // Gemini CLI uses "antigravity" or "antigravity-cli" depending on version
+  for (const variant of ["antigravity", "antigravity-cli"]) {
+    add(
+      "gemini",
+      `.gemini/${variant}`,
+      path.join(homeDir(), ".gemini", variant, "skills"),
+      "user",
+      false,
+    );
+    add(
+      "gemini",
+      `.gemini/${variant} (global)`,
+      path.join(homeDir(), ".gemini", variant, "global_skills"),
+      "user",
+      false,
+    );
+  }
 
   const hermesProfiles = path.join(homeDir(), ".hermes", "profiles");
   let profileEntries = [];
