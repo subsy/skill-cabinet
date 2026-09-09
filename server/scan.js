@@ -20,6 +20,32 @@ export function quarantineRoot() {
   return path.join(homeDir(), ".skill-cabinet", "quarantine");
 }
 
+// Extra drawers via SKILL_CABINET_EXTRA_ROOTS, e.g.
+//   SKILL_CABINET_EXTRA_ROOTS="gemini-config=$HOME/.gemini/config/skills,opencode=$HOME/.config/opencode/skills"
+// Entries without a label=path shape are ignored; missing dirs are skipped by add().
+export function extraRoots() {
+  const raw = process.env.SKILL_CABINET_EXTRA_ROOTS || "";
+  const out = [];
+  for (const item of raw.split(",")) {
+    const cut = item.indexOf("=");
+    if (cut === -1) continue;
+    const label = item.slice(0, cut).trim();
+    const dir = item.slice(cut + 1).trim();
+    if (!label || !dir) continue;
+    const slug = label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    if (!slug) continue;
+    out.push({
+      scopeId: `extra-${slug}`,
+      scopeLabel: `Extra · ${label}`,
+      dir,
+    });
+  }
+  return out;
+}
+
 const SKIP_HOME_DOTDIRS = new Set([
   ".cache",
   ".local",
@@ -480,6 +506,10 @@ export function discoverRoots() {
       false,
       true,
     );
+  }
+
+  for (const extra of extraRoots()) {
+    add(extra.scopeId, extra.scopeLabel, extra.dir, "user", false);
   }
 
   let quarantineScopes = [];

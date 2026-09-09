@@ -27,6 +27,11 @@ SKILL_CABINET_NO_OPEN=1 npx skill-cabinet
 PORT=4000 npx skill-cabinet
 ```
 
+```bash
+# scan additional drawers beyond the built-ins (label=path, comma-separated)
+SKILL_CABINET_EXTRA_ROOTS="opencode=$HOME/.config/opencode/skills" npx skill-cabinet
+```
+
 Requires Node 20+.
 
 ## What it can do
