@@ -80,9 +80,17 @@ function idFor(absPath) {
 const NAMED_SKILL_FILES = new Set(["skill.md", "SKILL.md"]);
 const IGNORE_LOOSE_MD = new Set([
   "readme.md",
+  "readme.es.md",
+  "readme.ko.md",
   "changelog.md",
   "license.md",
   "licence.md",
+  "description.md",
+  "security.md",
+  "contributing.md",
+  "pull_request_template.md",
+  "access.md",
+  "benchmark.md",
 ]);
 
 function isSkillFileName(name) {
