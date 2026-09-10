@@ -6,6 +6,15 @@ A local catalog for agent skills installed on your machine. It scans user-level 
 
 <img src="docs/images/cabinet.jpg" alt="Skill Cabinet: drawers, index cards, and a skill on the reading desk" width="960">
 
+## This fork
+
+Local extensions to the scanner, all in `server/scan.js`:
+
+- Generic `~/.*` drawers are scanned deep, so drawers that nest skills by category (`skills/<category>/<skill>/SKILL.md`, e.g. Hermes, ghcp-appmod) are picked up like flat ones.
+- Additional roots: `.hermes/plugins`, `.grok/bundled/skills`, `.config/opencode/node_modules`, `.gemini/config/plugins`, `.gemini/antigravity-cli` and `.gemini/antigravity-ide` (builtins + IDE plugins), `.local/share/mimocode/builtin_skills`.
+- More loose docs ignored: `readme.es.md`, `readme.ko.md`, `description.md`, `security.md`, `contributing.md`, `pull_request_template.md`, `access.md`, `benchmark.md`.
+- Deliberately **not** scanned: `.grok/marketplace-cache` — hashed checkouts of marketplace *catalogs* (xai `plugin-marketplace`, anthropics `claude-plugins-official`), not skills an agent reads.
+
 ## Run
 
 ```bash
