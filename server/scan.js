@@ -80,9 +80,17 @@ function idFor(absPath) {
 const NAMED_SKILL_FILES = new Set(["skill.md", "SKILL.md"]);
 const IGNORE_LOOSE_MD = new Set([
   "readme.md",
+  "readme.es.md",
+  "readme.ko.md",
   "changelog.md",
   "license.md",
   "licence.md",
+  "description.md",
+  "security.md",
+  "contributing.md",
+  "pull_request_template.md",
+  "access.md",
+  "benchmark.md",
 ]);
 
 function isSkillFileName(name) {
@@ -426,7 +434,11 @@ export function discoverRoots() {
     const scopeId = entry.name.slice(1);
 
     for (const folder of ["skills", "skill"]) {
-      add(scopeId, entry.name, path.join(base, folder), "user", false);
+      // Drawers may nest skills by category (Hermes: skills/<category>/<skill>,
+      // ghcp-appmod: skills/guidelines/<skill>), one level deeper than the
+      // flat layout other tools use; deep collection handles both, the same
+      // way the Hermes profile roots below already do.
+      add(scopeId, entry.name, path.join(base, folder), "user", false, true);
     }
 
     if (entry.name === ".cursor") {
@@ -460,6 +472,88 @@ export function discoverRoots() {
     path.join(homeDir(), ".gemini/antigravity/global_skills"),
     "user",
     false,
+  );
+
+  // Hermes keeps user skills in category subfolders
+  // (skills/<category>/<skill>/SKILL.md) — already covered by the deep flag on
+  // the generic drawer above — and plugin skills under plugins/<name>/skills/
+  // plus some at plugin roots (ponytail ships both layouts). Scan the plugins
+  // tree deep rather than recursive so both layouts are adopted; the bundled
+  // hermes-agent checkout (skills/, optional-skills/) is not user state and
+  // stays out of the cabinet.
+  add(
+    "hermes",
+    ".hermes/plugins",
+    path.join(homeDir(), ".hermes/plugins"),
+    "plugin",
+    false,
+    true,
+  );
+
+  // Grok ships bundled skills next to its user drawer. The marketplace-cache
+  // holds hashed checkouts of marketplace *catalogs* (xai plugin-marketplace,
+  // anthropics claude-plugins-official), not installed plugins — nothing the
+  // agent reads — so it is deliberately left out of the cabinet.
+  add(
+    "grok",
+    ".grok/bundled",
+    path.join(homeDir(), ".grok/bundled/skills"),
+    "builtin",
+    false,
+  );
+
+  // OpenCode loads plugins from its config directory (skills ship inside each
+  // npm plugin package); node_modules is skipped by walkSkillContainers, so
+  // the packages tree is adopted deep. Same for Antigravity plugin installs,
+  // which live under .gemini/config/plugins, and the builtin/plugin skill sets
+  // shipped by the Antigravity CLI and IDE.
+  add(
+    "opencode",
+    ".config/opencode/node_modules",
+    path.join(homeDir(), ".config/opencode/node_modules"),
+    "plugin",
+    false,
+    true,
+  );
+  add(
+    "gemini",
+    ".gemini/config/plugins",
+    path.join(homeDir(), ".gemini/config/plugins"),
+    "plugin",
+    false,
+    true,
+  );
+  add(
+    "gemini",
+    ".gemini/antigravity-cli (builtin)",
+    path.join(homeDir(), ".gemini/antigravity-cli/builtin/skills"),
+    "builtin",
+    false,
+  );
+  add(
+    "gemini",
+    ".gemini/antigravity-ide (builtin)",
+    path.join(homeDir(), ".gemini/antigravity-ide/builtin/skills"),
+    "builtin",
+    false,
+  );
+  add(
+    "gemini",
+    ".gemini/antigravity-ide/plugins",
+    path.join(homeDir(), ".gemini/antigravity-ide/plugins"),
+    "plugin",
+    false,
+    true,
+  );
+
+  // mimo Code caches builtin skills per version under its XDG data dir.
+  add(
+    "mimo",
+    "mimocode builtin",
+    path.join(homeDir(), ".local/share/mimocode/builtin_skills"),
+    "builtin",
+    false,
+    true,
   );
 
   const hermesProfiles = path.join(homeDir(), ".hermes", "profiles");
